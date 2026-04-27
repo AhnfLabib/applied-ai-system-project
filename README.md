@@ -1,46 +1,154 @@
-# 🎮 Game Glitch Investigator: The Impossible Guesser
+# 🎮 Game Glitch Investigator + Reliability Dashboard
 
-## 🚨 The Situation
+## Original Project
 
-You asked an AI to build a simple "Number Guessing Game" using Streamlit.
-It wrote the code, ran away, and now the game is unplayable. 
+**Game Glitch Investigator** is a number-guessing game built with Streamlit where an AI generated buggy code on purpose. The player picks a difficulty, guesses a secret number, and gets "Higher/Lower" hints — but the original AI-generated version had backwards hints, a secret that reset on every button click, and difficulty ranges that weren't respected. The project's goal was to find and fix those bugs, then refactor the logic into a testable module.
 
-- You can't win.
-- The hints lie to you.
-- The secret number seems to have commitment issues.
+---
 
-## 🛠️ Setup
+## New System: Reliability Dashboard
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run the broken app: `python -m streamlit run app.py`
+The final project extends the fixed game with a **Reliability Dashboard** — a second Streamlit page that stress-tests all four game logic functions using `hypothesis`, a property-based testing library. Instead of hand-writing specific test cases, hypothesis automatically generates hundreds of inputs (including edge cases no human would think of) and verifies that the logic holds up for all of them. Results are displayed per-function with pass/fail status, case counts, and interesting examples that hypothesis surfaced.
 
-## 🕵️‍♂️ Your Mission
+**Advanced AI feature type:** Reliability/Testing System
 
-1. **Play the game.** Open the "Developer Debug Info" tab in the app to see the secret number. Try to win.
-2. **Find the State Bug.** Why does the secret number change every time you click "Submit"? Ask ChatGPT: *"How do I keep a variable from resetting in Streamlit when I click a button?"*
-3. **Fix the Logic.** The hints ("Higher/Lower") are wrong. Fix them.
-4. **Refactor & Test.** - Move the logic into `logic_utils.py`.
-   - Run `pytest` in your terminal.
-   - Keep fixing until all tests pass!
+---
 
-## 📝 Document Your Experience
+## Architecture
 
-**Game's purpose.** A number-guessing game where the player picks a difficulty (range), gets a secret number in that range, and uses "Higher"/"Lower" hints to guess it. The app uses Streamlit with a Developer Debug Info tab that shows the secret for debugging.
+```
+applied-ai-system-project/
+├── app.py                          # Game UI (Streamlit page 1)
+├── logic_utils.py                  # Pure Python game logic — no Streamlit
+├── pages/
+│   └── 2_Reliability_Dashboard.py  # Dashboard UI (Streamlit page 2)
+├── reliability/
+│   ├── hypothesis_tests.py         # 4 @given-decorated test functions with counters
+│   └── runner.py                   # run_all() — calls each test, returns results
+├── tests/
+│   ├── test_game_logic.py          # Original bug-encoding tests
+│   ├── test_logic_utils.py         # Unit tests for logic_utils
+│   └── test_runner.py              # Tests for the runner output structure
+└── requirements.txt
+```
 
-**Bugs found.**
-1. **Submit on Enter** – Pressing Enter didn’t submit the guess; only clicking the button worked.
-2. **Backwards hints** – After submitting, hints said "go lower" even when the guess was below the secret (e.g. guess 9, secret 100 still said go lower).
-3. **Secret outside range** – The chosen difficulty range wasn’t respected; the secret could be outside the selected min/max.
-4. **Secret reset on rerun** – The secret number changed on every Streamlit rerun (e.g. every "Submit" click), so the game was unwinnable.
+**Data flow:**
+1. User navigates to Reliability Dashboard and clicks "Run Reliability Check"
+2. Dashboard calls `runner.run_all()`
+3. Runner resets counters, calls each hypothesis test function, catches failures
+4. Each test generates ~300 random inputs via `@given`, checks assertions
+5. Results (name, tested count, pass/fail, interesting cases) stored in `st.session_state`
+6. Dashboard renders per-function expanders and a summary line
 
-**Fixes applied.**
-- Stored the secret in `st.session_state` so it persists across reruns and stays within the selected difficulty range.
-- Fixed hint logic so "Higher"/"Lower" (and "Too Low"/"Too High") match the actual comparison with the secret; verified with manual play and `pytest` (e.g. `check_guess(9, 100)` returns `'Too Low'`).
-- Addressed Enter-key submit (Streamlit form/button behavior) so submitting works as expected.
-- Moved core logic into `logic_utils.py` and kept tests passing so behavior stays correct.
+---
 
-## 📸 Demo
+## Setup
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app (both pages available from the sidebar)
+streamlit run app.py
+```
+
+---
+
+## Sample Interactions
+
+### 1. Playing the game (Normal difficulty)
+
+```
+Range: 1–100 | Attempts allowed: 8
+
+Guess: 50  →  📈 Go LOWER!
+Guess: 25  →  📉 Go HIGHER!
+Guess: 37  →  🎉 Correct! Final score: 70
+```
+
+### 2. Reliability Dashboard — all functions pass
+
+After clicking "Run Reliability Check":
+
+```
+✅ check_guess           — 300 cases tested
+   Interesting: check_guess(0, 0) → ('Win', '🎉 Correct!')
+                check_guess(-14467, 12881) → ('Too Low', ...)
+                check_guess(9, "100") → ("Too Low", ...) [string secret, no TypeError]
+
+✅ parse_guess           — 300 cases tested
+   Interesting: parse_guess('') → (False, None, 'Enter a guess.')
+
+✅ update_score          — 300 cases tested
+   Interesting: update_score(0, 'Win', 0) → 90
+                update_score(-28368, 'Win', 0) → -28278
+
+✅ get_range_for_difficulty — 4 cases tested
+   Interesting: get_range_for_difficulty('Easy') → (1, 20)
+                get_range_for_difficulty('Hard') → (1, 200)
+                get_range_for_difficulty('Unknown') → (1, 100)
+
+4/4 functions passed · 904 total cases tested
+```
+
+### 3. Reliability Dashboard — catching a bug
+
+If someone introduced a bug in `check_guess` (e.g., flipped `>` to `<`):
+
+```
+❌ check_guess  — 2 cases tested
+   Failure: assert 'Too High' == 'Win'
+            Falsifying example: check_guess(guess=0, secret=0)
+```
+
+Hypothesis finds the minimal failing input automatically.
+
+---
+
+## Design Decisions and Trade-offs
+
+**Why `logic_utils.py` instead of importing from `app.py`?**
+`app.py` runs Streamlit UI code at module level (`st.set_page_config`, `st.title`, etc.). Importing from it inside the reliability module would trigger those calls in the wrong context. Moving logic to `logic_utils.py` (pure Python, zero Streamlit) eliminates this entirely. The game still works because `app.py` imports from `logic_utils`.
+
+**Why `sampled_from` for `get_range_for_difficulty`?**
+The function only has four meaningful inputs. Using `text()` would generate arbitrary strings, and the difficulty-specific assertions (`Hard range ≥ Normal range`) would almost never trigger. `sampled_from(["Easy", "Normal", "Hard", "Unknown"])` tests exactly the cases that matter. Hypothesis correctly stops at 4 unique examples rather than running 300 redundant ones.
+
+**Why store results in `st.session_state`?**
+Hypothesis tests take a few seconds to run. Storing results in session state means navigating away and back doesn't re-trigger the run. The "Clear Results" button lets the user reset explicitly.
+
+**Trade-off: UI not tested**
+The dashboard tests pure logic only. Streamlit UI behavior (button clicks, page navigation, session state transitions) is not covered. Manual testing covers that layer.
+
+---
+
+## Testing Summary
+
+| Test file | What it covers | Tests |
+|---|---|---|
+| `tests/test_game_logic.py` | Original bug-encoding tests — correct behavior for known bugs | 10 |
+| `tests/test_logic_utils.py` | Unit tests for all 4 functions in `logic_utils.py` | 11 |
+| `tests/test_runner.py` | `run_all()` returns correct structure, all functions pass, sufficient coverage | 6 |
+| **hypothesis (via dashboard)** | Property-based stress-test: 300 random inputs per function at runtime | ~904 |
+
+Run the static suite:
+```bash
+pytest -v
+# 27 passed
+```
+
+---
+
+## Reflection
+
+Building the Reliability Dashboard taught me that automated testing has two distinct layers: verifying specific known cases (what `test_game_logic.py` does) and verifying general behavioral properties across a wide input space (what hypothesis does). The two are complementary — you need both.
+
+The most surprising moment was discovering that `hypothesis` stops early when the input space is finite. With only four valid difficulty strings, it runs 4 examples, not 300. That forced me to think about what "sufficient coverage" actually means for a specific function, rather than applying one threshold to all functions.
+
+The reliability framing also clarified why this matters for AI-generated code: when an AI writes a function, you don't always know what edge cases it considered. Property-based testing makes you state your assumptions explicitly as assertions, then lets a search algorithm find the inputs where those assumptions break. That's a more honest way to validate AI-generated code than reading it and hoping it looks right.
+
+---
+
+## Demo
 
 ![Fixed winning game screenshot](assets/win.jpeg)
-![Added Feature](assets/image.png)
-
+![Reliability Dashboard](assets/image.png)
