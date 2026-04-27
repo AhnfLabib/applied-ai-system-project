@@ -95,7 +95,7 @@ _range_counter = [0]
 _range_interesting = []
 
 
-@given(text())
+@given(sampled_from(["Easy", "Normal", "Hard", "Unknown"]))
 @settings(max_examples=300)
 def test_get_range_properties(difficulty):
     _range_counter[0] += 1
