@@ -36,11 +36,10 @@ Streamlit's multipage convention automatically discovers `pages/` — no changes
 ## Module: `reliability/hypothesis_tests.py`
 
 Contains four `@given`-decorated test functions, one per game logic function. Each uses:
-- A mutable counter (`[0]`) to track how many examples hypothesis generated
-- A list to collect interesting edge cases observed during the run
+- A module-level mutable counter (`[0]`) and interesting-cases list, reset before each run and read after
 - `@settings(max_examples=300)` for thorough coverage without being slow
 
-Each function returns `(counter, interesting_cases)` so the runner can read them after the call.
+`@given`-decorated functions cannot return values, so the counter and interesting list are module-level state. `runner.py` resets them, calls the test function, then reads them.
 
 ### `test_check_guess_properties`
 - **Strategy:** `@given(integers(), integers())`
@@ -48,8 +47,8 @@ Each function returns `(counter, interesting_cases)` so the runner can read them
   - `outcome` is always one of `"Win"`, `"Too High"`, `"Too Low"`
   - `message` is always a non-empty string
   - Logical consistency: `Win` ↔ `guess == secret`, `Too High` ↔ `guess > secret`, `Too Low` ↔ `guess < secret`
-  - No `TypeError` when secret is passed as a string (e.g. `check_guess(9, "100")`)
-- **Interesting cases collected:** exact wins (`guess == secret`), very large/negative integers, string secrets
+  - Explicit inline call `check_guess(9, "100")` inside the test body asserts no `TypeError` and returns `"Too Low"` (string secret edge case — not hypothesis-generated since strategy is `integers()`)
+- **Interesting cases collected:** exact wins (`guess == secret`), very large/negative integers
 
 ### `test_parse_guess_properties`
 - **Strategy:** `@given(text())`
