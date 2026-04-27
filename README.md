@@ -42,7 +42,5 @@ It wrote the code, ran away, and now the game is unplayable.
 ## 📸 Demo
 
 ![Fixed winning game screenshot](assets/win.jpeg)
+![Added Feature](assets/image.png)
 
-## 🚀 Stretch Features
-
-- [ ] [If you choose to complete Challenge 4, insert a screenshot of your Enhanced Game UI here]
